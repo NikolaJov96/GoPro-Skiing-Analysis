@@ -34,3 +34,5 @@ To create a fun animated 3D graph showing the movement trajectory, color coded u
 ```
 python3 animatedGraph.py geojson_file_path output_video_file_path --speedup_coefficient 12 --revolution_duration_s 8 --remove_no_movement
 ```
+
+![Animated plot](ReadmeContent/animatedPlot.gif)
