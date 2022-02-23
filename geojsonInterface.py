@@ -5,10 +5,7 @@ import argparse
 import json
 import re
 from math import atan2, cos, radians, sin, sqrt
-from typing import List
-
-import matplotlib.cm as cm
-import matplotlib.pyplot as plt
+from typing import List, Tuple
 
 
 class GeojsonInterface:
@@ -56,6 +53,7 @@ class GeojsonInterface:
         self.__video_id = int(geojson_path[-12:-8])
         self.__outlier_frames_num = 0
         self.__none_frames_num = 0
+        self.__no_movement_frames_num = 0
         self.__frames_num = 0
 
         self.__frame_data = []
@@ -130,13 +128,53 @@ class GeojsonInterface:
             self.__frame_speeds_ms.append(total_distance / total_time)
             self.__frame_speeds_kmh.append(total_distance / total_time / 1000.0 * 3600.0)
 
-    def plot_trajectory(self):
+    def remove_no_movement(self, frame_range: int, min_distance_m: float) -> None:
         """
-        Displays a basic movement trajectory plot for debugging
+        Cuts-off parts of the recording without movement
         """
+        assert self.__frames_num == len(self.frame_coordinates)
+
+        frames_to_remove = []
+
+        removed_micro_sec = 0
+
+        distance_range = sum(self.__frame_distances_m[:2 * frame_range + 1])
+        for frame_id in range(frame_range, self.__frames_num - frame_range):
+            # Check if the frame should be removed
+            distance_range = sum(self.__frame_distances_m[frame_id - frame_range:frame_id + frame_range + 1])
+            if distance_range < min_distance_m:
+                # The frame should be removed
+                # Accumulate it's time
+                removed_micro_sec += (self.frame_rel_microsecs[frame_id + 1] - self.frame_rel_microsecs[frame_id])
+                # Add to the removal list
+                frames_to_remove.append(frame_id)
+            else:
+                # The frame should not be remoed, updates it's timing
+                self.__frame_data['properties']['AbsoluteUtcMicroSec'][frame_id] -= removed_micro_sec
+                self.__frame_data['properties']['RelativeMicroSec'][frame_id] -= removed_micro_sec
+                self.__frame_times_s[frame_id] -= removed_micro_sec / 1000.0
+
+        for frame_id in frames_to_remove[::-1]:
+            del self.__frame_data['geometry']['coordinates'][frame_id]
+            del self.__frame_data['properties']['AbsoluteUtcMicroSec'][frame_id]
+            del self.__frame_data['properties']['RelativeMicroSec'][frame_id]
+            del self.__frame_times_s[frame_id]
+            del self.__frame_distances_m[frame_id]
+            del self.__frame_speeds_ms[frame_id]
+            del self.__frame_speeds_kmh[frame_id]
+        self.__no_movement_frames_num = len(frames_to_remove)
+        self.__frames_num = len(self.frame_coordinates)
+
+    def get_lat_long_in_meters(self) -> Tuple[List[float], List[float]]:
+        """
+        Converts latitude and longitude coordinates to meters
+        Average latitude and longitude are taken as the coordinate system center
+        """
+        # Get frame position coordinates
         lats = [x[1] for x in self.frame_coordinates]
         lons = [x[0] for x in self.frame_coordinates]
-        heights = [x[2] for x in self.frame_coordinates]
+
+        # Prepare the distance unit scaling
         min_lat_frame = lats.index(min(lats))
         max_lat_frame = lats.index(max(lats))
         min_lon_frame = lons.index(min(lons))
@@ -147,18 +185,14 @@ class GeojsonInterface:
         d_lon = GeojsonInterface.geo_to_meters(
             [lats[min_lon_frame], lons[min_lon_frame]],
             [lats[min_lon_frame], lons[max_lon_frame]])
+        avg_lons = (max(lons) + min(lons)) / 2.0
+        avg_lats = (max(lats) + min(lats)) / 2.0
 
-        plt.figure()
-        ax = plt.axes(projection='3d')
-        plt.title('Video {} trajectory'.format(self.video_id))
-        x_coords = [((x - min(lons)) / (max(lons) - min(lons))) * d_lon for x in lons]
-        y_coords = [((x - min(lats)) / (max(lats) - min(lats))) * d_lat for x in lats]
-        max_recorded_speed = max(self.frame_speeds_kmh)
-        colors = cm.jet([x / max_recorded_speed for x in self.frame_speeds_kmh])
-        ax.scatter(x_coords, y_coords, heights, color=colors)
-        ax.set_xlim(0, max(d_lat, d_lon))
-        ax.set_ylim(0, max(d_lat, d_lon))
-        plt.show()
+        # Calculate graph data values
+        x_coords = [((x - avg_lons) / (max(lons) - min(lons))) * d_lon for x in lons]
+        y_coords = [((x - avg_lats) / (max(lats) - min(lats))) * d_lat for x in lats]
+
+        return x_coords, y_coords
 
     @property
     def geojson_path(self) -> str:
@@ -187,6 +221,13 @@ class GeojsonInterface:
         Counts number of frames removed due to being too coordinates being None
         """
         return self.__none_frames_num
+
+    @property
+    def no_movement_frames_num(self) -> int:
+        """
+        Counts number of frames removed due to no movement being detected
+        """
+        return self.__no_movement_frames_num
 
     @property
     def frames_num(self) -> int:

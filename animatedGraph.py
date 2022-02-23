@@ -48,30 +48,17 @@ class GraphAnimator:
         """
         Create the 3D animation
         """
-        # Get frame position coordinates
-        lats = [x[1] for x in self.__video.frame_coordinates]
-        lons = [x[0] for x in self.__video.frame_coordinates]
+        # Get 3D coordinates
+        self.__x_coords, self.__y_coords = self.__video.get_lat_long_in_meters()
         self.__heights = [x[2] for x in self.__video.frame_coordinates]
 
-        # Prepare the distance unit scaling
-        min_lat_frame = lats.index(min(lats))
-        max_lat_frame = lats.index(max(lats))
-        min_lon_frame = lons.index(min(lons))
-        max_lon_frame = lons.index(max(lons))
-        d_lat = GeojsonInterface.geo_to_meters(
-            [lats[min_lat_frame], lons[min_lat_frame]],
-            [lats[max_lat_frame], lons[min_lat_frame]])
-        d_lon = GeojsonInterface.geo_to_meters(
-            [lats[min_lon_frame], lons[min_lon_frame]],
-            [lats[min_lon_frame], lons[max_lon_frame]])
+        # Get some scaling values
+        d_lon = max(self.__x_coords) - min(self.__x_coords)
+        d_lat = max(self.__y_coords) - min(self.__y_coords)
         d_height = max(self.__heights) - min(self.__heights)
-        avg_lons = (max(lons) + min(lons)) / 2.0
-        avg_lats = (max(lats) + min(lats)) / 2.0
         avg_height = (max(self.__heights) + min(self.__heights)) / 2.0
 
-        # Calculate graph data values
-        self.__x_coords = [((x - avg_lons) / (max(lons) - min(lons))) * d_lon for x in lons]
-        self.__y_coords = [((x - avg_lats) / (max(lats) - min(lats))) * d_lat for x in lats]
+        # Determine point colors using speed
         max_recorded_speed = max(self.__video.frame_speeds_kmh)
         self.__colors = cm.jet([x / max_recorded_speed for x in self.__video.frame_speeds_kmh])
 
@@ -146,7 +133,7 @@ class GraphAnimator:
         self.__graph._edgecolor3d = self.__graph.get_edgecolor()
 
         # Update camera view
-        elev = (1.0 - out_frame_id / self.__output_frame_batches_num) * 25.0
+        elev = (1.0 - out_frame_id / self.__output_frame_batches_num) * 20.0
         time_s = out_frame_id / self.__output_video_fps
         azim = (time_s / self.__revolution_duration_s - int(time_s / self.__revolution_duration_s)) * 360.0
         self.__ax.view_init(elev=elev, azim=azim)
@@ -186,29 +173,34 @@ def main() -> None:
         type=float,
         default=1.0,
         help='Duration of one camera rotation in seconds')
+    parser.add_argument(
+        '--remove_no_movement',
+        '-rnm',
+        action='store_true',
+        help='Whether to remove time periods when there is no movement')
     args = parser.parse_args()
-    geojson_file_path = args.geojson_file_path
-    output_video_file_path = args.output_video_file_path
-    output_video_fps = args.output_video_fps
-    speedup_coefficient = args.speedup_coefficient
-    revolution_duration_s = args.revolution_duration_s
 
     # Load the data
-    video = GeojsonInterface(geojson_file_path)
+    video = GeojsonInterface(args.geojson_file_path)
+    if args.remove_no_movement:
+        frame_range = 10
+        min_distance_m = 3
+        video.remove_no_movement(frame_range, min_distance_m)
 
     # Debug printout
     print('Video id: {}'.format(video.video_id))
     print('Number of frames: {}'.format(video.frames_num))
     print('Average speed: {} km/h'.format(sum(video.frame_speeds_kmh) / video.frames_num))
     print('Outlier frames num: {}'.format(video.outlier_frames_num))
+    print('No movenet frames num: {}'.format(video.no_movement_frames_num))
 
     # Render the animation
     graphAnimator = GraphAnimator(
         video,
-        output_video_fps,
-        speedup_coefficient,
-        revolution_duration_s,
-        output_video_file_path,
+        args.output_video_fps,
+        args.speedup_coefficient,
+        args.revolution_duration_s,
+        args.output_video_file_path,
         verbose=True)
     graphAnimator.render()
 
