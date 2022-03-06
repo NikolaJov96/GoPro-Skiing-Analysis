@@ -118,6 +118,8 @@ class GeojsonInterface:
             GeojsonInterface.geo_to_meters(self.frame_coordinates[i], self.frame_coordinates[i + 1])
             for i in range(self.frames_num - 1)
         ]
+        self.__frame_distances_m.append(self.__frame_distances_m[-1])
+        assert len(self.__frame_distances_m) == self.frames_num
 
         # Calculate speeds
         for frame_id in range(self.frames_num):
@@ -127,6 +129,8 @@ class GeojsonInterface:
             total_time = self.__frame_times_s[look_to - 1] - self.__frame_times_s[look_from]
             self.__frame_speeds_ms.append(total_distance / total_time)
             self.__frame_speeds_kmh.append(total_distance / total_time / 1000.0 * 3600.0)
+        assert len(self.__frame_speeds_ms) == self.frames_num
+        assert len(self.__frame_speeds_kmh) == self.frames_num
 
     def remove_no_movement(self, frame_range: int, min_distance_m: float) -> None:
         """
