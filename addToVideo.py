@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 
 import cv2
-from wandb import Video
 
 from geojsonInterface import GeojsonInterface
 
@@ -22,7 +21,8 @@ class VideoEditor:
             video_id: int,
             output_video_path: str,
             start_time: float = None,
-            end_time: float = None) -> None:
+            end_time: float = None,
+            display_frames: bool = False) -> None:
         """
         """
         self.__geojson_file_path = geojson_file_path
@@ -31,6 +31,7 @@ class VideoEditor:
         self.__output_video_path = output_video_path
         self.__start_time = start_time
         self.__end_time = end_time
+        self.__display_frames = display_frames
 
     def edit(self) -> None:
         """
@@ -100,12 +101,17 @@ class VideoEditor:
                 self.__add_speed(frame, gps.frame_speeds_kmh[gps_frame_id])
                 self.__add_map(frame)
 
+                if self.__display_frames:
+                    cv2.imshow('Frames', frame)
+                    cv2.waitKey(10)
+
                 new_video.write(frame)
 
                 if next_frame_id >= chapter_frame_num:
                     break
 
             print()
+            cv2.destroyAllWindows()
 
         new_video.release()
 
@@ -158,6 +164,11 @@ def main() -> None:
         '--end_time',
         type=float,
         help='Time in the input video to end at')
+    parser.add_argument(
+        '--display_frames',
+        '-d',
+        action='store_true',
+        help='Whether to display rendered frames while rendering')
     args = parser.parse_args()
 
     assert len(args.video_id) == 4
@@ -169,7 +180,8 @@ def main() -> None:
         video_id=args.video_id,
         output_video_path=args.output_video_path,
         start_time=args.start_time,
-        end_time=args.end_time)
+        end_time=args.end_time,
+        display_frames=args.display_frames)
     video_editor.edit()
 
 
