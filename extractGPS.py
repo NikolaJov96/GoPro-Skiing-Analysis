@@ -23,7 +23,7 @@ def main() -> None:
     found_videos = {}
 
     # Find videos and the number of chapters
-    for video_chapter_path in Path(args.video_dir_path).rglob('*.MP4'):
+    for video_chapter_path in Path(args.video_directory_path).rglob('*.MP4'):
         # Create video chapter properties
         video_chapter_name = os.path.basename(video_chapter_path)
         video_directory_path = os.path.dirname(video_chapter_path)
@@ -42,7 +42,7 @@ def main() -> None:
             found_videos[video_id]['chapters'] = max(found_videos[video_id]['chapters'], chapter_id)
 
     # Extract GPS from concatenated videos
-    os.makedirs(args.geojson_dir_path, exist_ok=True)
+    os.makedirs(args.geojson_directory_path, exist_ok=True)
     failed_video_ids = []
     for i, video in enumerate(found_videos.values()):
         # Get video properties
@@ -55,7 +55,7 @@ def main() -> None:
         video_file_list = [f'"{video_file}"' for video_file in video_file_list]
 
         # Create the external analysis command
-        output_file = os.path.join(args.geojson_dir_path, '{:04}.geojson'.format(video_id))
+        output_file = os.path.join(args.geojson_directory_path, '{:04}.geojson'.format(video_id))
         cmd = 'node ./GPSExtractor/extractGPS.js {} {}'.format(output_file, ' '.join(video_file_list))
         print('Video: {}/{}'.format(i + 1, len(found_videos)))
         print(cmd)
